@@ -55,7 +55,7 @@ jobs:
           tags: |
             type=ref,event=tag,prefix=,suffix=
             type=sha,prefix=,suffix=,format=short
-            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
 
       - name: Build and push backend image
@@ -79,7 +79,7 @@ jobs:
           tags: |
             type=ref,event=tag,prefix=,suffix=
             type=sha,prefix=,suffix=,format=short
-            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
 
       - name: Build and push frontend image
