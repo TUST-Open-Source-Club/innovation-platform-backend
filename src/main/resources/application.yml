@@ -42,10 +42,14 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-minio:
-  url: http://192.168.147.110:9000
-  accessKey: minioadmin
-  secretKey: minioadmin
+
+# 文件存储配置
+file:
+  storage:
+    path: ./uploads
+  access:
+    url: /uploads
+
 # JWT??
 jwt:
   secret: innovation-platform-secret-key-2024

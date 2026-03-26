@@ -6,8 +6,11 @@ import com.abajin.innovation.common.PageResult;
 import com.abajin.innovation.common.Result;
 import com.abajin.innovation.entity.PersonLibrary;
 import com.abajin.innovation.mapper.PersonLibraryMapper;
+import com.abajin.innovation.service.PersonService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 人员库控制器
@@ -18,6 +21,9 @@ public class PersonController {
 
     @Autowired
     private PersonLibraryMapper personLibraryMapper;
+
+    @Autowired
+    private PersonService personService;
 
     /**
      * 分页查询人员列表
@@ -116,6 +122,28 @@ public class PersonController {
             }
             personLibraryMapper.deleteById(id);
             return Result.success("删除成功", null);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
+     * 上传 Excel 批量导入人员（学院/学校管理员）
+     * POST /api/persons/import
+     */
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresRole(value = {Constants.ROLE_COLLEGE_ADMIN, Constants.ROLE_SCHOOL_ADMIN}, allowAdmin = true)
+    public Result<Integer> importPersonsExcel(@RequestParam("file") MultipartFile file) {
+        try {
+            if (file == null || file.isEmpty()) {
+                return Result.error("请选择 Excel 文件");
+            }
+            String name = file.getOriginalFilename();
+            if (name == null || (!name.endsWith(".xlsx") && !name.endsWith(".xls"))) {
+                return Result.error("请上传 .xlsx 或 .xls 格式的 Excel 文件");
+            }
+            int count = personService.importPersonsFromExcel(file.getInputStream());
+            return Result.success("成功导入 " + count + " 个人员", count);
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }

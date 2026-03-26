@@ -43,10 +43,12 @@ mybatis:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
-minio:
-  url: ${MINIO_URL:http://host.docker.internal:9000}
-  accessKey: ${MINIO_ACCESSKEY:minioadmin}
-  secretKey: ${MINIO_SECRETKEY:minioadmin}
+# 文件存储配置
+file:
+  storage:
+    path: ./uploads
+  access:
+    url: /uploads
 
 jwt:
   secret: ${JWT_SECRET:innovation-platform-secret-key-2024}

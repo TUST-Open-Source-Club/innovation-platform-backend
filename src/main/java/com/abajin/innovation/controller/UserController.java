@@ -1,5 +1,7 @@
 package com.abajin.innovation.controller;
 
+import com.abajin.innovation.annotation.RequiresRole;
+import com.abajin.innovation.common.Constants;
 import com.abajin.innovation.common.PageResult;
 import com.abajin.innovation.common.Result;
 import com.abajin.innovation.converter.LoginUserDTOConverter;
@@ -10,7 +12,9 @@ import com.abajin.innovation.entity.User;
 import com.abajin.innovation.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -163,6 +167,28 @@ public class UserController {
         try {
             userService.deleteUser(id);
             return Result.success("删除用户成功", null);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
+     * 上传 Excel 批量导入用户（学院/学校管理员）
+     * POST /api/users/import
+     */
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresRole(value = {Constants.ROLE_COLLEGE_ADMIN, Constants.ROLE_SCHOOL_ADMIN}, allowAdmin = true)
+    public Result<Integer> importUsersExcel(@RequestParam("file") MultipartFile file) {
+        try {
+            if (file == null || file.isEmpty()) {
+                return Result.error("请选择 Excel 文件");
+            }
+            String name = file.getOriginalFilename();
+            if (name == null || (!name.endsWith(".xlsx") && !name.endsWith(".xls"))) {
+                return Result.error("请上传 .xlsx 或 .xls 格式的 Excel 文件");
+            }
+            int count = userService.importUsersFromExcel(file.getInputStream());
+            return Result.success("成功导入 " + count + " 个用户", count);
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }
