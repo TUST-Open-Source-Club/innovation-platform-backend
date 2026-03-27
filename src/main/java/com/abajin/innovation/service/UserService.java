@@ -5,19 +5,26 @@ import com.abajin.innovation.dto.CreateUserDTO;
 import com.abajin.innovation.dto.LoginDTO;
 import com.abajin.innovation.dto.RegisterDTO;
 import com.abajin.innovation.dto.UserQueryDTO;
+import com.abajin.innovation.dto.UserImportDTO;
 import com.abajin.innovation.entity.User;
+import com.abajin.innovation.entity.College;
 import com.abajin.innovation.mapper.UserMapper;
 import com.abajin.innovation.mapper.CollegeMapper;
 import com.abajin.innovation.util.JwtUtil;
 import com.abajin.innovation.common.Constants;
+import com.abajin.innovation.listener.UserImportListener;
+import com.alibaba.excel.EasyExcel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -60,13 +67,18 @@ public class UserService {
             throw new RuntimeException("用户名已存在");
         }
 
+        // 只允许注册学生账号
+        if (!Constants.ROLE_STUDENT.equals(registerDTO.getRole())) {
+            throw new RuntimeException("注册只允许学生角色，其他账号类型请联系管理员创建");
+        }
+
         User user = new User();
         user.setUsername(registerDTO.getUsername());
         user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
         user.setRealName(registerDTO.getRealName());
         user.setEmail(registerDTO.getEmail());
         user.setPhone(registerDTO.getPhone());
-        user.setRole(registerDTO.getRole());
+        user.setRole(Constants.ROLE_STUDENT);
         user.setCollegeId(registerDTO.getCollegeId());
         user.setStatus(Constants.USER_STATUS_ENABLED);
         user.setCreateTime(LocalDateTime.now());
@@ -268,5 +280,93 @@ public class UserService {
         }
         // TODO: 检查用户是否有关联数据（项目、团队等），如果有则不允许删除
         userMapper.deleteById(userId);
+    }
+
+    /**
+     * 从Excel导入用户
+     * @param inputStream Excel文件输入流
+     * @return 导入成功的用户数量
+     */
+    @Transactional
+    public int importUsersFromExcel(InputStream inputStream) {
+        UserImportListener listener = new UserImportListener();
+        EasyExcel.read(inputStream, UserImportDTO.class, listener).sheet().doRead();
+        List<UserImportDTO> list = listener.getList();
+
+        // 获取所有学院，用于根据名称查找学院ID
+        List<College> colleges = collegeMapper.selectAll();
+        Map<String, College> collegeNameMap = colleges.stream()
+                .collect(Collectors.toMap(College::getName, c -> c, (c1, c2) -> c1));
+
+        int count = 0;
+        for (UserImportDTO row : list) {
+            // 检查必填字段
+            if (row.getUsername() == null || row.getUsername().trim().isEmpty()) {
+                throw new RuntimeException("第" + (count + 1) + "行：用户名不能为空");
+            }
+            if (row.getPassword() == null || row.getPassword().trim().isEmpty()) {
+                throw new RuntimeException("第" + (count + 1) + "行：密码不能为空");
+            }
+            if (row.getRealName() == null || row.getRealName().trim().isEmpty()) {
+                throw new RuntimeException("第" + (count + 1) + "行：真实姓名不能为空");
+            }
+            if (row.getRole() == null || row.getRole().trim().isEmpty()) {
+                throw new RuntimeException("第" + (count + 1) + "行：角色不能为空");
+            }
+
+            // 验证角色是否有效
+            String role = row.getRole().trim();
+            if (!Constants.ROLE_STUDENT.equals(role) 
+                    && !Constants.ROLE_TEACHER.equals(role)
+                    && !Constants.ROLE_COLLEGE_ADMIN.equals(role) 
+                    && !Constants.ROLE_SCHOOL_ADMIN.equals(role)) {
+                throw new RuntimeException("第" + (count + 1) + "行：无效的角色，必须是 STUDENT、TEACHER、COLLEGE_ADMIN 或 SCHOOL_ADMIN");
+            }
+
+            // 检查用户名是否已存在
+            User existingUser = userMapper.selectByUsername(row.getUsername().trim());
+            if (existingUser != null) {
+                throw new RuntimeException("第" + (count + 1) + "行：用户名已存在：" + row.getUsername());
+            }
+
+            // 确定学院ID
+            Long collegeId = row.getCollegeId();
+            String collegeName = null;
+            if (collegeId == null && row.getCollegeName() != null && !row.getCollegeName().trim().isEmpty()) {
+                College college = collegeNameMap.get(row.getCollegeName().trim());
+                if (college != null) {
+                    collegeId = college.getId();
+                    collegeName = college.getName();
+                }
+            } else if (collegeId != null) {
+                College college = collegeMapper.selectById(collegeId);
+                if (college != null) {
+                    collegeName = college.getName();
+                }
+            }
+
+            // 确定状态
+            Integer status = row.getStatus();
+            if (status == null) {
+                status = Constants.USER_STATUS_ENABLED;
+            }
+
+            User user = new User();
+            user.setUsername(row.getUsername().trim());
+            user.setPassword(passwordEncoder.encode(row.getPassword().trim()));
+            user.setRealName(row.getRealName().trim());
+            user.setEmail(row.getEmail() != null && !row.getEmail().trim().isEmpty() ? row.getEmail().trim() : null);
+            user.setPhone(row.getPhone() != null && !row.getPhone().trim().isEmpty() ? row.getPhone().trim() : null);
+            user.setRole(role);
+            user.setCollegeId(collegeId);
+            user.setCollegeName(collegeName);
+            user.setStatus(status);
+            user.setCreateTime(LocalDateTime.now());
+            user.setUpdateTime(LocalDateTime.now());
+
+            userMapper.insert(user);
+            count++;
+        }
+        return count;
     }
 }

@@ -13,7 +13,7 @@ import java.util.List;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    @Value("${file.upload-path:./uploads/}")
+    @Value("${file.storage.path:./uploads}")
     private String uploadPath;
 
     @Autowired

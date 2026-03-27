@@ -8,9 +8,11 @@ import com.abajin.innovation.entity.ActivitySummary;
 import com.abajin.innovation.entity.User;
 import com.abajin.innovation.enums.ActivityStatus;
 import com.abajin.innovation.enums.ApprovalStatus;
+import com.abajin.innovation.entity.ActivityType;
 import com.abajin.innovation.mapper.ActivityMapper;
 import com.abajin.innovation.mapper.ActivityRegistrationMapper;
 import com.abajin.innovation.mapper.ActivitySummaryMapper;
+import com.abajin.innovation.mapper.ActivityTypeMapper;
 import com.abajin.innovation.mapper.SpaceReservationMapper;
 import com.abajin.innovation.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,10 +22,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import com.alibaba.excel.EasyExcel;
+import com.abajin.innovation.dto.ActivityImportDTO;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,6 +57,9 @@ class ActivityServiceTest {
 
     @Mock
     private SpaceReservationMapper spaceReservationMapper;
+
+    @Mock
+    private ActivityTypeMapper activityTypeMapper;
 
     @InjectMocks
     private ActivityService activityService;
@@ -430,5 +441,113 @@ class ActivityServiceTest {
         RuntimeException exception = assertThrows(RuntimeException.class,
                 () -> activityService.reviewSummary(1L, ApprovalStatus.APPROVED.name(), "", 2L));
         assertEquals("该总结已审批，无法重复操作", exception.getMessage());
+    }
+
+    // ==================== Excel导入测试 ====================
+
+    @Test
+    void importActivitiesFromExcel_withNonExistentOrganizer_throwsException() {
+        // Arrange
+        when(userMapper.selectById(999L)).thenReturn(null);
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> activityService.importActivitiesFromExcel(new ByteArrayInputStream(new byte[0]), 999L));
+        assertEquals("组织者不存在", exception.getMessage());
+    }
+
+    @Test
+    void importActivitiesFromExcel_withValidData_importsSuccessfully() throws Exception {
+        // Arrange
+        when(userMapper.selectById(1L)).thenReturn(organizer);
+        when(activityTypeMapper.selectAll()).thenReturn(Collections.emptyList());
+        when(activityMapper.insert(any(Activity.class))).thenReturn(1);
+
+        // 创建测试Excel数据
+        ActivityImportDTO dto = new ActivityImportDTO();
+        dto.setTitle("测试导入活动");
+        dto.setActivityType("讲座");
+        dto.setStartTime("2026-01-01 10:00:00");
+        dto.setEndTime("2026-01-01 12:00:00");
+        dto.setLocation("会议室A");
+        dto.setDescription("测试描述");
+        dto.setContent("测试内容");
+        dto.setMaxParticipants(100);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        EasyExcel.write(outputStream, ActivityImportDTO.class).sheet("活动").doWrite(Collections.singletonList(dto));
+        InputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+
+        // Act
+        int count = activityService.importActivitiesFromExcel(inputStream, 1L);
+
+        // Assert
+        assertEquals(1, count);
+        verify(activityMapper, times(1)).insert(any(Activity.class));
+    }
+
+    @Test
+    void importActivitiesFromExcel_withMultipleRows_importsAll() throws Exception {
+        // Arrange
+        when(userMapper.selectById(1L)).thenReturn(organizer);
+        when(activityTypeMapper.selectAll()).thenReturn(Collections.emptyList());
+        when(activityMapper.insert(any(Activity.class))).thenReturn(1);
+
+        // 创建多个测试数据
+        ActivityImportDTO dto1 = new ActivityImportDTO();
+        dto1.setTitle("活动1");
+        dto1.setStartTime("2026-01-01 10:00");
+        dto1.setEndTime("2026-01-01 12:00");
+
+        ActivityImportDTO dto2 = new ActivityImportDTO();
+        dto2.setTitle("活动2");
+        dto2.setStartTime("2026-01-02 14:00");
+        dto2.setEndTime("2026-01-02 16:00");
+
+        List<ActivityImportDTO> list = new ArrayList<>();
+        list.add(dto1);
+        list.add(dto2);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        EasyExcel.write(outputStream, ActivityImportDTO.class).sheet("活动").doWrite(list);
+        InputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+
+        // Act
+        int count = activityService.importActivitiesFromExcel(inputStream, 1L);
+
+        // Assert
+        assertEquals(2, count);
+        verify(activityMapper, times(2)).insert(any(Activity.class));
+    }
+
+    @Test
+    void importActivitiesFromExcel_withActivityType_mappingWorks() throws Exception {
+        // Arrange
+        ActivityType type = new ActivityType();
+        type.setId(1L);
+        type.setName("创新创业讲座");
+
+        when(userMapper.selectById(1L)).thenReturn(organizer);
+        when(activityTypeMapper.selectAll()).thenReturn(Collections.singletonList(type));
+        when(activityMapper.insert(any(Activity.class))).thenReturn(1);
+
+        ActivityImportDTO dto = new ActivityImportDTO();
+        dto.setTitle("带类型的活动");
+        dto.setActivityType("创新创业讲座");
+        dto.setStartTime("2026-01-01 10:00:00");
+        dto.setEndTime("2026-01-01 12:00:00");
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        EasyExcel.write(outputStream, ActivityImportDTO.class).sheet("活动").doWrite(Collections.singletonList(dto));
+        InputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+
+        // Act
+        int count = activityService.importActivitiesFromExcel(inputStream, 1L);
+
+        // Assert
+        assertEquals(1, count);
+        verify(activityMapper).insert(argThat(activity -> 
+            activity.getActivityTypeId() != null && activity.getActivityTypeId().equals(1L)
+        ));
     }
 }

@@ -9,11 +9,10 @@ import com.abajin.innovation.common.Result;
 import com.abajin.innovation.entity.Activity;
 import com.abajin.innovation.entity.ActivityRegistration;
 import com.abajin.innovation.entity.ActivitySummary;
-import com.abajin.innovation.util.MinioUtils;
+import com.abajin.innovation.util.FileStorageUtils;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import org.springframework.web.multipart.MultipartFile;
@@ -22,6 +21,8 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.springframework.http.MediaType;
 
 /**
  * 活动管理控制器
@@ -34,13 +35,7 @@ public class ActivityController {
     private ActivityService activityService;
 
     @Autowired
-    private MinioUtils minioUtils;
-
-    @Value("${minio.bucket:first}")
-    private String bucketName;
-
-    @Value("${minio.base-url:http://192.168.147.110:9000}")
-    private String minioBaseUrl; // 保留配置兼容，目前不直接拼接 URL
+    private FileStorageUtils fileStorageUtils;
 
     /**
      * 创建活动申报
@@ -97,17 +92,13 @@ public class ActivityController {
                     ? originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase() : "";
             String filename = UUID.randomUUID().toString().replace("-", "") + ext;
 
-            // 确保桶存在并上传到 MinIO
-            minioUtils.createBucket(bucketName);
             // 路径：second/activity-poster/uuid.ext
             String objectName = "second/" + dir + "/" + filename;
             try (InputStream in = file.getInputStream()) {
-                minioUtils.uploadFile(in, bucketName, objectName);
+                String posterUrl = fileStorageUtils.uploadFile(in, objectName);
+                Activity activity = activityService.updateActivityPoster(id, posterUrl, userId);
+                return Result.success("海报上传成功", activity);
             }
-            // 使用预签名 URL 供前端预览
-            String posterUrl = minioUtils.getPreviewFileUrl(bucketName, objectName);
-            Activity activity = activityService.updateActivityPoster(id, posterUrl, userId);
-            return Result.success("海报上传成功", activity);
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }
@@ -382,6 +373,30 @@ public class ActivityController {
         } catch (Exception e) {
             log.error("删除活动系统异常: ", e);
             return Result.error("系统繁忙，请稍后重试");
+        }
+    }
+
+    /**
+     * 上传 Excel 批量导入活动（学院/学校管理员）
+     * POST /api/activities/import
+     */
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequiresRole(value = {Constants.ROLE_COLLEGE_ADMIN, Constants.ROLE_SCHOOL_ADMIN}, allowAdmin = true)
+    public Result<Integer> importActivitiesExcel(
+            @RequestParam("file") MultipartFile file,
+            @RequestAttribute("userId") Long userId) {
+        try {
+            if (file == null || file.isEmpty()) {
+                return Result.error("请选择 Excel 文件");
+            }
+            String name = file.getOriginalFilename();
+            if (name == null || (!name.endsWith(".xlsx") && !name.endsWith(".xls"))) {
+                return Result.error("请上传 .xlsx 或 .xls 格式的 Excel 文件");
+            }
+            int count = activityService.importActivitiesFromExcel(file.getInputStream(), userId);
+            return Result.success("成功导入 " + count + " 个活动", count);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
         }
     }
 }

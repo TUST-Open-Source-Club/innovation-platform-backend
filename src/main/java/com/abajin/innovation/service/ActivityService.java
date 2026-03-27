@@ -1,10 +1,14 @@
 package com.abajin.innovation.service;
 
 import com.abajin.innovation.dto.ActivityDTO;
+import com.abajin.innovation.dto.ActivityImportDTO;
 import com.abajin.innovation.common.Constants;
+import com.abajin.innovation.entity.ActivityType;
 import com.abajin.innovation.enums.ActivityStatus;
 import com.abajin.innovation.enums.ApprovalStatus;
+import com.abajin.innovation.listener.ActivityImportListener;
 import com.abajin.innovation.mapper.ActivityRegistrationMapper;
+import com.abajin.innovation.mapper.ActivityTypeMapper;
 import com.abajin.innovation.entity.Activity;
 import com.abajin.innovation.entity.ActivityRegistration;
 import com.abajin.innovation.entity.ActivitySummary;
@@ -14,13 +18,21 @@ import com.abajin.innovation.mapper.ActivitySummaryMapper;
 import com.abajin.innovation.mapper.SpaceReservationMapper;
 import com.abajin.innovation.mapper.UserMapper;
 import com.abajin.innovation.entity.SpaceReservation;
+import com.alibaba.excel.EasyExcel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.InputStream;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 活动管理服务类
@@ -42,6 +54,9 @@ public class ActivityService {
 
     @Autowired
     private SpaceReservationMapper spaceReservationMapper;
+
+    @Autowired
+    private ActivityTypeMapper activityTypeMapper;
 
     /**
      * 创建活动申报
@@ -503,5 +518,128 @@ public class ActivityService {
         log.info("更新活动 is_deleted=1: id={}, 原状态保留为: {}", activity.getId(), activity.getStatus());
         int affectedRows = activityMapper.update(activity);
         log.info("更新完成: affectedRows={}", affectedRows);
+    }
+
+    /**
+     * 从Excel导入活动
+     * @param inputStream Excel文件输入流
+     * @param organizerId 组织者ID（导入者）
+     * @return 导入成功的活动数量
+     */
+    @Transactional
+    public int importActivitiesFromExcel(InputStream inputStream, Long organizerId) {
+        User organizer = userMapper.selectById(organizerId);
+        if (organizer == null) {
+            throw new RuntimeException("组织者不存在");
+        }
+
+        ActivityImportListener listener = new ActivityImportListener();
+        EasyExcel.read(inputStream, ActivityImportDTO.class, listener).sheet().doRead();
+        List<ActivityImportDTO> list = listener.getList();
+
+        // 获取所有活动类型，用于根据名称查找类型ID
+        List<ActivityType> activityTypes = activityTypeMapper.selectAll();
+        Map<String, ActivityType> activityTypeMap = activityTypes.stream()
+                .collect(Collectors.toMap(
+                        at -> at.getName().trim(),
+                        at -> at,
+                        (at1, at2) -> at1
+                ));
+
+        int count = 0;
+        for (ActivityImportDTO row : list) {
+            // 检查必填字段
+            if (row.getTitle() == null || row.getTitle().trim().isEmpty()) {
+                throw new RuntimeException("第" + (count + 1) + "行：活动标题不能为空");
+            }
+
+            // 解析时间
+            LocalDateTime startTime = parseDateTime(row.getStartTime());
+            LocalDateTime endTime = parseDateTime(row.getEndTime());
+            
+            if (startTime == null) {
+                throw new RuntimeException("第" + (count + 1) + "行：开始时间格式不正确");
+            }
+            if (endTime == null) {
+                throw new RuntimeException("第" + (count + 1) + "行：结束时间格式不正确");
+            }
+            if (endTime.isBefore(startTime)) {
+                throw new RuntimeException("第" + (count + 1) + "行：结束时间不能早于开始时间");
+            }
+
+            // 确定活动类型ID
+            Long activityTypeId = null;
+            if (row.getActivityType() != null && !row.getActivityType().trim().isEmpty()) {
+                ActivityType at = activityTypeMap.get(row.getActivityType().trim());
+                if (at != null) {
+                    activityTypeId = at.getId();
+                }
+            }
+
+            Activity activity = new Activity();
+            activity.setTitle(row.getTitle().trim());
+            activity.setActivityTypeId(activityTypeId);
+            activity.setActivitySeries(row.getActivitySeries() != null && !row.getActivitySeries().trim().isEmpty() 
+                    ? row.getActivitySeries().trim() : null);
+            activity.setOrganizerId(organizerId);
+            activity.setOrganizerName(organizer.getRealName());
+            activity.setOrganizerType("USER");
+            activity.setStartTime(startTime);
+            activity.setEndTime(endTime);
+            activity.setLocation(row.getLocation() != null && !row.getLocation().trim().isEmpty() 
+                    ? row.getLocation().trim() : null);
+            activity.setDescription(row.getDescription() != null && !row.getDescription().trim().isEmpty() 
+                    ? row.getDescription().trim() : null);
+            activity.setContent(row.getContent() != null && !row.getContent().trim().isEmpty() 
+                    ? row.getContent().trim() : null);
+            activity.setRegistrationLink(row.getRegistrationLink() != null && !row.getRegistrationLink().trim().isEmpty() 
+                    ? row.getRegistrationLink().trim() : null);
+            activity.setMaxParticipants(row.getMaxParticipants());
+            activity.setStatus(ActivityStatus.DRAFT.name());
+            activity.setApprovalStatus(ApprovalStatus.PENDING.name());
+            activity.setIsDeleted(0);
+            activity.setCreateTime(LocalDateTime.now());
+            activity.setUpdateTime(LocalDateTime.now());
+
+            activityMapper.insert(activity);
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * 解析日期时间字符串
+     * 支持多种格式：yyyy-MM-dd HH:mm:ss, yyyy/MM/dd HH:mm:ss, yyyy-MM-dd HH:mm, yyyy/MM/dd HH:mm
+     */
+    private LocalDateTime parseDateTime(String dateTimeStr) {
+        if (dateTimeStr == null || dateTimeStr.trim().isEmpty()) {
+            return null;
+        }
+        String str = dateTimeStr.trim();
+        
+        // 尝试各种格式
+        String[] patterns = {
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy/MM/dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy/MM/dd HH:mm",
+            "yyyy-MM-dd",
+            "yyyy/MM/dd"
+        };
+        
+        for (String pattern : patterns) {
+            try {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
+                if (pattern.contains("HH")) {
+                    return LocalDateTime.parse(str, formatter);
+                } else {
+                    return LocalDate.parse(str, formatter).atStartOfDay();
+                }
+            } catch (DateTimeParseException e) {
+                // 继续尝试下一个格式
+            }
+        }
+        
+        return null;
     }
 }
