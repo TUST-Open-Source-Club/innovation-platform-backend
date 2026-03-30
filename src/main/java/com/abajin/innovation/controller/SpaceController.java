@@ -221,4 +221,16 @@ public class SpaceController {
             return Result.error(e.getMessage());
         }
     }
+
+    @PostMapping("/create")
+    @RequiresRole(value = {Constants.ROLE_COLLEGE_ADMIN}, allowAdmin = true)
+    public Result<Integer> createSpace(@Valid @RequestBody Space space) {
+        try {
+            int created = spaceReservationService.createSpace(space);
+            return Result.success("空间创建成功", created);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
 }

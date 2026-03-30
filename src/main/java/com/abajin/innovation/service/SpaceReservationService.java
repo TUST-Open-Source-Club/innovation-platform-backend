@@ -12,6 +12,7 @@ import com.abajin.innovation.mapper.ActivityMapper;
 import com.abajin.innovation.mapper.SpaceMapper;
 import com.abajin.innovation.mapper.SpaceReservationMapper;
 import com.abajin.innovation.mapper.UserMapper;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -330,5 +331,22 @@ public class SpaceReservationService {
             return reservationMapper.selectByStatus(status);
         }
         return reservationMapper.selectAll();
+    }
+
+    public int createSpace(@Valid Space space) {
+        String originalName = space.getName();
+        String currentName = originalName;
+        int count = 1;
+
+        // 循环检查数据库中是否存在同名
+        while (spaceMapper.selectCountByName(currentName) > 0) {
+            currentName = originalName + "(" + count + ")";
+            count++;
+        }
+        // 将最终确定的唯一名称赋给对象
+        space.setName(currentName);
+
+        spaceMapper.insertSpace(space);
+        return space.getCapacity();
     }
 }

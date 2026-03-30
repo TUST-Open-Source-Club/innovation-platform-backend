@@ -15,24 +15,32 @@
     </resultMap>
 
     <select id="selectById" resultMap="BaseResultMap">
-        SELECT * FROM space WHERE id = #{id}
+        SELECT * FROM space WHERE id = #{id} AND is_deleted = 0
     </select>
 
     <select id="selectAll" resultMap="BaseResultMap">
-        SELECT * FROM space ORDER BY create_time DESC
+        SELECT * FROM space WHERE is_deleted = 0 ORDER BY create_time DESC
     </select>
 
     <select id="selectByTypeId" resultMap="BaseResultMap">
-        SELECT * FROM space WHERE space_type_id = #{spaceTypeId} ORDER BY create_time DESC
+        SELECT * FROM space WHERE space_type_id = #{spaceTypeId} and is_deleted = 0 ORDER BY create_time DESC
     </select>
 
     <select id="selectByStatus" resultMap="BaseResultMap">
-        SELECT * FROM space WHERE status = #{status} ORDER BY create_time DESC
+        SELECT * FROM space WHERE is_deleted = 0 AND status = #{status} ORDER BY create_time DESC
+    </select>
+    <select id="selectCountByName" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM space WHERE is_deleted = 0 AND name = #{name} AND is_deleted = 0
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO space (name, space_type_id, location, capacity, facilities, description, status, create_time, update_time)
-        VALUES (#{name}, #{spaceTypeId}, #{location}, #{capacity}, #{facilities}, #{description}, #{status}, #{createTime}, #{updateTime})
+        INSERT INTO space (name, location, capacity, facilities, description, status, create_time, update_time,is_deleted)
+        VALUES (#{name}, #{location}, #{capacity}, #{facilities}, #{description}, #{status}, #{createTime}, #{updateTime},0)
+    </insert>
+
+    <insert id="insertSpace">
+        INSERT INTO space (name, location, capacity, facilities, description, status, create_time, update_time,is_deleted)
+        VALUES (#{name}, #{location}, #{capacity}, #{facilities}, #{description}, #{status}, NOW(), NOW(), 0)
     </insert>
 
     <update id="update">
@@ -51,6 +59,6 @@
     </update>
 
     <delete id="deleteById">
-        DELETE FROM space WHERE id = #{id}
+        UPDATE space SET is_deleted = 1 WHERE id = #{id}
     </delete>
 </mapper>
