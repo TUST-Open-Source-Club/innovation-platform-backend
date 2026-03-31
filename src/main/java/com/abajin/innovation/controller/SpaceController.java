@@ -114,7 +114,7 @@ public class SpaceController {
      * 学生和教师都可以使用
      */
     @PostMapping("/reservations")
-    @RequiresRole(value = {Constants.ROLE_STUDENT, Constants.ROLE_TEACHER})
+    @RequiresRole(value = {Constants.ROLE_STUDENT, Constants.ROLE_TEACHER, Constants.ROLE_COLLEGE_ADMIN, Constants.ROLE_SCHOOL_ADMIN})
     public Result<SpaceReservation> createReservation(
             @Valid @RequestBody SpaceReservation reservation,
             @RequestAttribute("userId") Long userId) {
