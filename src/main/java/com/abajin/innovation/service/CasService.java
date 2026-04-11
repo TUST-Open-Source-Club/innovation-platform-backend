@@ -46,15 +46,36 @@ public class CasService {
     private PasswordEncoder passwordEncoder;
 
     /**
+     * CAS用户信息封装类
+     */
+    public static class CasUserInfo {
+        private String uid;        // 学号/工号
+        private String cn;         // 姓名
+        private String userName;   // 用户名
+        private String college;    // 学院名称
+        private String userType;   // 用户类型：student/teacher
+
+        public String getUid() { return uid; }
+        public void setUid(String uid) { this.uid = uid; }
+        public String getCn() { return cn; }
+        public void setCn(String cn) { this.cn = cn; }
+        public String getUserName() { return userName; }
+        public void setUserName(String userName) { this.userName = userName; }
+        public String getCollege() { return college; }
+        public void setCollege(String college) { this.college = college; }
+        public String getUserType() { return userType; }
+        public void setUserType(String userType) { this.userType = userType; }
+    }
+
+    /**
      * 验证CAS ticket并处理登录
      */
     @Transactional
     public CasLoginResponse validateTicketAndLogin(String ticket, String serviceUrl) {
-        // 1. 验证ticket
-        Map<String, Object> casUserInfo = validateTicket(ticket, serviceUrl);
-        String casUid = (String) casUserInfo.get("uid");
-        String cn = (String) casUserInfo.get("cn");
-        String userName = (String) casUserInfo.get("user_name");
+        // 1. 验证ticket并获取用户信息
+        CasUserInfo casUserInfo = validateTicket(ticket, serviceUrl);
+        String casUid = casUserInfo.getUid();
+        String cn = casUserInfo.getCn();
 
         // 2. 根据cas_uid查询用户
         User user = userMapper.selectByCasUid(casUid);
@@ -71,20 +92,20 @@ public class CasService {
             // 有同名本地账号，返回合并提示
             CasLoginResponse response = new CasLoginResponse();
             response.setNeedMerge(true);
-            response.setDuplicateAccount(duplicateUsers.get(0));
+            response.setDuplicateAccount(LoginUserDTOConverter.convert(duplicateUsers.get(0)));
             response.setCasUid(casUid);
             response.setCasName(cn);
             return response;
         }
 
         // 4. 创建新的CAS用户
-        return createNewCasUser(casUid, cn, userName);
+        return createNewCasUser(casUserInfo);
     }
 
     /**
      * 验证CAS ticket
      */
-    private Map<String, Object> validateTicket(String ticket, String serviceUrl) {
+    private CasUserInfo validateTicket(String ticket, String serviceUrl) {
         // Mock模式：用于本地测试
         if (casConfig.getMockMode() && ticket.startsWith("MOCK-")) {
             return validateMockTicket(ticket);
@@ -101,16 +122,14 @@ public class CasService {
             AttributePrincipal principal = assertion.getPrincipal();
             Map<String, Object> attributes = principal.getAttributes();
 
-            String casUid = principal.getName(); // uid
-            String cn = (String) attributes.get("cn"); // 姓名
-            String userName = (String) attributes.get("user_name");
+            CasUserInfo userInfo = new CasUserInfo();
+            userInfo.setUid(principal.getName()); // uid - 学号/工号
+            userInfo.setCn((String) attributes.get("cn")); // 姓名
+            userInfo.setUserName((String) attributes.get("user_name"));
+            userInfo.setCollege((String) attributes.get("college")); // 学院
+            userInfo.setUserType((String) attributes.get("user_type")); // 用户类型
 
-            Map<String, Object> result = new java.util.HashMap<>();
-            result.put("uid", casUid);
-            result.put("cn", cn);
-            result.put("user_name", userName);
-
-            return result;
+            return userInfo;
         } catch (TicketValidationException e) {
             throw new RuntimeException("CAS ticket验证失败: " + e.getMessage());
         }
@@ -119,22 +138,23 @@ public class CasService {
     /**
      * 验证Mock ticket（用于本地测试）
      */
-    private Map<String, Object> validateMockTicket(String ticket) {
+    private CasUserInfo validateMockTicket(String ticket) {
         // 从ticket中提取用户信息：MOCK-{uid}-{name}
         String[] parts = ticket.split("-", 3);
         if (parts.length < 3) {
             throw new RuntimeException("Mock ticket格式错误");
         }
 
-        String casUid = parts[1];
-        String cn = parts[2];
+        CasUserInfo userInfo = new CasUserInfo();
+        userInfo.setUid(parts[1]);
+        userInfo.setCn(parts[2]);
+        userInfo.setUserName(parts[2]);
+        
+        // Mock学院信息（可根据需要修改）
+        userInfo.setCollege("计算机学院");
+        userInfo.setUserType("student");
 
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("uid", casUid);
-        result.put("cn", cn);
-        result.put("user_name", cn);
-
-        return result;
+        return userInfo;
     }
 
     /**
@@ -152,6 +172,7 @@ public class CasService {
         CasLoginResponse response = new CasLoginResponse();
         response.setToken(token);
         response.setUser(LoginUserDTOConverter.convert(user));
+        response.setNeedMerge(false);
 
         // 检查是否需要完善资料
         if (user.getIsProfileComplete() != null && user.getIsProfileComplete() == 0) {
@@ -166,16 +187,38 @@ public class CasService {
     /**
      * 创建新的CAS用户
      */
-    private CasLoginResponse createNewCasUser(String casUid, String cn, String userName) {
+    private CasLoginResponse createNewCasUser(CasUserInfo casUserInfo) {
+        String casUid = casUserInfo.getUid();
+        String cn = casUserInfo.getCn();
+        String collegeName = casUserInfo.getCollege();
+
         User user = new User();
         user.setUsername(casUid); // 使用学号/工号作为用户名
         user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString())); // 随机密码，不可用
         user.setRealName(cn);
-        user.setRole(Constants.ROLE_STUDENT); // 默认学生角色
+        
+        // 根据用户类型设置角色
+        if ("teacher".equalsIgnoreCase(casUserInfo.getUserType())) {
+            user.setRole(Constants.ROLE_TEACHER);
+        } else {
+            user.setRole(Constants.ROLE_STUDENT); // 默认学生角色
+        }
+        
         user.setAuthType(Constants.AUTH_TYPE_CAS);
         user.setCasUid(casUid);
         user.setIsProfileComplete(0); // 需要完善资料
         user.setStatus(Constants.USER_STATUS_ENABLED);
+        
+        // 设置学院信息（如果CAS返回了学院）
+        if (collegeName != null && !collegeName.isEmpty()) {
+            user.setCollegeName(collegeName);
+            // 尝试查找匹配的学院ID
+            College college = findCollegeByName(collegeName);
+            if (college != null) {
+                user.setCollegeId(college.getId());
+            }
+        }
+        
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
 
@@ -188,35 +231,38 @@ public class CasService {
         response.setToken(token);
         response.setUser(LoginUserDTOConverter.convert(user));
         response.setNeedCompleteProfile(true);
+        response.setNeedMerge(false);
 
         return response;
     }
 
     /**
-     * 合并本地账号
+     * 根据学院名称查找学院
      */
-    @Transactional
-    public CasLoginResponse mergeAccount(String casUid, String password) {
-        // 1. 根据casUid获取CAS用户信息（从临时创建的用户或待合并状态）
-        // 这里我们需要先验证是否有对应的CAS登录尝试
-        // 简化处理：直接根据realName查找本地账号
-
-        // 2. 查找同名本地账号
-        List<User> localUsers = userMapper.selectByRealNameAndAuthType(null, Constants.AUTH_TYPE_LOCAL);
-
-        // 由于我们需要通过casUid来识别，这里改为先查CAS信息
-        // 实际上在前端调用时，应该传递更多信息
-        // 为了简化，我们假设前端已经确认了要合并的账号
-
-        throw new RuntimeException("请使用完整的合并接口，提供realName参数");
+    private College findCollegeByName(String collegeName) {
+        // 首先精确匹配
+        List<College> colleges = collegeMapper.selectAll();
+        for (College college : colleges) {
+            if (college.getName().equals(collegeName)) {
+                return college;
+            }
+        }
+        // 然后模糊匹配
+        for (College college : colleges) {
+            if (college.getName().contains(collegeName) || collegeName.contains(college.getName())) {
+                return college;
+            }
+        }
+        return null;
     }
 
     /**
      * 合并本地账号（完整版本）
+     * 将本地账号升级为支持CAS认证
      */
     @Transactional
     public CasLoginResponse mergeAccountWithRealName(String casUid, String realName, String password) {
-        // 1. 查找本地账号
+        // 1. 查找本地账号（非CAS账号）
         List<User> localUsers = userMapper.selectByRealNameAndAuthType(realName, Constants.AUTH_TYPE_LOCAL);
 
         if (localUsers.isEmpty()) {
@@ -230,19 +276,72 @@ public class CasService {
             throw new RuntimeException("密码错误");
         }
 
-        // 3. 更新账号为双认证模式
+        // 3. 检查是否已经有其他账号绑定了这个CAS UID
+        User existingCasUser = userMapper.selectByCasUid(casUid);
+        if (existingCasUser != null && !existingCasUser.getId().equals(localUser.getId())) {
+            throw new RuntimeException("该统一身份认证账号已绑定其他用户");
+        }
+
+        // 4. 更新账号为双认证模式
         localUser.setAuthType(Constants.AUTH_TYPE_BOTH);
         localUser.setCasUid(casUid);
         localUser.setUpdateTime(LocalDateTime.now());
         userMapper.update(localUser);
 
-        // 4. 生成JWT token
+        // 5. 生成JWT token
         String token = jwtUtil.generateToken(localUser.getId(), localUser.getUsername(), localUser.getRole());
 
         CasLoginResponse response = new CasLoginResponse();
         response.setToken(token);
         response.setUser(LoginUserDTOConverter.convert(localUser));
         response.setNeedCompleteProfile(false);
+        response.setNeedMerge(false);
+
+        return response;
+    }
+
+    /**
+     * 创建新账号（跳过合并）
+     * 当用户选择不合并时，创建一个新的CAS账号
+     */
+    @Transactional
+    public CasLoginResponse createNewAccountWithoutMerge(String casUid, String realName) {
+        // 检查是否已存在
+        User existingUser = userMapper.selectByCasUid(casUid);
+        if (existingUser != null) {
+            return handleExistingCasUser(existingUser);
+        }
+
+        // 创建新用户，使用不同的用户名避免冲突
+        User user = new User();
+        // 如果学号已被占用，添加CAS前缀
+        String username = casUid;
+        int suffix = 0;
+        while (userMapper.selectByUsername(username) != null) {
+            suffix++;
+            username = casUid + "_cas" + suffix;
+        }
+        
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+        user.setRealName(realName);
+        user.setRole(Constants.ROLE_STUDENT);
+        user.setAuthType(Constants.AUTH_TYPE_CAS);
+        user.setCasUid(casUid);
+        user.setIsProfileComplete(0);
+        user.setStatus(Constants.USER_STATUS_ENABLED);
+        user.setCreateTime(LocalDateTime.now());
+        user.setUpdateTime(LocalDateTime.now());
+
+        userMapper.insert(user);
+
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+
+        CasLoginResponse response = new CasLoginResponse();
+        response.setToken(token);
+        response.setUser(LoginUserDTOConverter.convert(user));
+        response.setNeedCompleteProfile(true);
+        response.setNeedMerge(false);
 
         return response;
     }

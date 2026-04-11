@@ -232,7 +232,43 @@ public class UserService {
     }
 
     /**
-     * 更新用户信息
+     * 更新当前用户信息
+     * @param userId 当前用户ID
+     * @param userData 用户数据
+     * @return 更新后的用户
+     */
+    @Transactional
+    public User updateCurrentUser(Long userId, User userData) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        // 不允许修改用户名和密码
+        if (StringUtils.hasText(userData.getRealName())) {
+            user.setRealName(userData.getRealName());
+        }
+        if (StringUtils.hasText(userData.getEmail())) {
+            user.setEmail(userData.getEmail());
+        }
+        if (StringUtils.hasText(userData.getPhone())) {
+            user.setPhone(userData.getPhone());
+        }
+        if (userData.getCollegeId() != null) {
+            user.setCollegeId(userData.getCollegeId());
+            var college = collegeMapper.selectById(userData.getCollegeId());
+            if (college != null) {
+                user.setCollegeName(college.getName());
+            }
+        }
+        
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.update(user);
+        return user;
+    }
+
+    /**
+     * 更新用户信息（管理员用）
      * @param userId 用户ID
      * @param userData 用户数据
      */

@@ -1,6 +1,5 @@
 package com.abajin.innovation.dto;
 
-import com.abajin.innovation.entity.User;
 import lombok.Data;
 
 /**
@@ -31,7 +30,7 @@ public class CasLoginResponse {
     /**
      * 同名本地账号信息（用于合并提示）
      */
-    private User duplicateAccount;
+    private LoginUserDTO duplicateAccount;
 
     /**
      * CAS用户信息（用于合并）
