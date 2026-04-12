@@ -99,6 +99,18 @@ JWT_EXPIRATION=86400000
 
 # GitHub 用户名（用于镜像路径）
 GITHUB_OWNER=your-github-username
+
+# CAS统一身份认证配置（可选）
+# 是否启用CAS登录功能：true-启用, false-禁用（默认）
+CAS_ENABLED=false
+# Mock模式：true-本地测试模式（模拟CAS服务器）, false-真实CAS服务器（默认）
+CAS_MOCK_MODE=false
+# CAS服务器地址前缀
+CAS_SERVER_URL_PREFIX=http://ids.wisedu.com.cn:9086/authserver
+# CAS服务器登录地址
+CAS_SERVER_LOGIN_URL=http://ids.wisedu.com.cn:9086/authserver/login
+# 本应用公网访问地址（CAS回调用）
+CAS_CLIENT_HOST_URL=http://your-domain.com/api
 EOF
 ```
 
@@ -332,7 +344,84 @@ docker ps
 docker logs innovation_mysql
 ```
 
-## 11. 项目目录结构
+## 11. CAS统一身份认证配置
+
+系统支持两种认证方式，可通过环境变量灵活切换：
+
+### 11.1 认证方式说明
+
+| 认证方式 | 说明 | 适用场景 |
+|---------|------|---------|
+| **本地认证** | 使用用户名和密码登录 | 内部测试、未接入CAS的学校 |
+| **CAS统一认证** | 通过学校统一身份认证系统登录 | 已接入CAS的学校 |
+| **双认证** | 同时支持两种登录方式 | 过渡期间、兼容需求 |
+
+### 11.2 配置说明
+
+在 `.env` 文件中配置 CAS 参数：
+
+```bash
+# 基础配置（生产环境建议）
+CAS_ENABLED=true                      # 启用CAS功能
+CAS_MOCK_MODE=false                   # 关闭Mock模式，使用真实CAS服务器
+CAS_SERVER_URL_PREFIX=https://cas.your-school.edu.cn  # 学校CAS服务器地址
+CAS_SERVER_LOGIN_URL=https://cas.your-school.edu.cn/login
+CAS_CLIENT_HOST_URL=https://your-domain.com/api      # 本应用公网地址
+
+# 本地开发测试配置
+CAS_ENABLED=true                      # 启用CAS功能
+CAS_MOCK_MODE=true                    # 开启Mock模式，无需真实CAS服务器
+CAS_CLIENT_HOST_URL=http://localhost:8080/api
+```
+
+### 11.3 切换方法
+
+#### 切换到CAS统一认证
+
+```bash
+# 1. 编辑环境变量文件
+vim /opt/innovation-platform/.env
+
+# 2. 修改CAS配置
+CAS_ENABLED=true
+CAS_MOCK_MODE=false
+CAS_SERVER_URL_PREFIX=https://cas.your-school.edu.cn
+CAS_SERVER_LOGIN_URL=https://cas.your-school.edu.cn/login
+CAS_CLIENT_HOST_URL=https://your-domain.com/api
+
+# 3. 重启后端服务
+docker compose restart backend
+```
+
+#### 切换回本地认证
+
+```bash
+# 1. 编辑环境变量文件
+vim /opt/innovation-platform/.env
+
+# 2. 关闭CAS功能
+CAS_ENABLED=false
+
+# 3. 重启后端服务
+docker compose restart backend
+```
+
+### 11.4 CAS登录流程
+
+1. 用户在登录页点击「统一身份认证登录」
+2. 系统重定向到学校CAS服务器登录页
+3. 用户在CAS服务器完成认证
+4. CAS服务器重定向回应用，携带ticket
+5. 应用验证ticket，完成登录
+
+### 11.5 账号合并机制
+
+首次使用CAS登录时，系统会检测是否存在同名本地账号：
+
+- **检测到同名账号**：提示用户合并账号或创建新账号
+- **未检测到同名账号**：自动创建新账号，并提示完善资料
+
+## 12. 项目目录结构
 
 ```
 innovation-backend/
@@ -341,17 +430,55 @@ innovation-backend/
 │       ├── ci.yml           # CI：测试
 │       └── cd.yml           # CD：构建镜像（含子模块）
 ├── frontend/                # Git 子模块（前端代码）
+│   ├── src/
+│   │   ├── api/
+│   │   │   └── modules/
+│   │   │       └── cas.js               # CAS前端API
+│   │   ├── views/
+│   │   │   └── auth/
+│   │   │       ├── Login.vue            # 登录页（含CAS入口）
+│   │   │       ├── CasCallback.vue      # CAS回调处理
+│   │   │       ├── CasMerge.vue         # 账号合并页
+│   │   │       └── CompleteProfile.vue  # 完善资料页
+│   │   └── router/
+│   │       └── modules/
+│   │           └── auth.js              # 认证路由配置
 │   ├── Dockerfile
 │   └── ...
 ├── src/                     # 后端代码
+│   └── main/
+│       ├── java/com/abajin/innovation/
+│       │   ├── config/
+│       │   │   └── CasConfig.java          # CAS配置类
+│       │   ├── controller/
+│       │   │   └── CasAuthController.java  # CAS认证接口
+│       │   ├── service/
+│       │   │   └── CasService.java         # CAS认证服务
+│       │   ├── dto/
+│       │   │   ├── CasLoginResponse.java   # CAS登录响应
+│       │   │   ├── CasMergeRequest.java    # 账号合并请求
+│       │   │   └── CompleteProfileDTO.java # 完善资料DTO
+│       │   └── entity/
+│       │       └── User.java               # 用户实体（含CAS字段）
+│       └── resources/
+│           ├── mapper/
+│           │   └── UserMapper.xml          # 用户Mapper（含CAS查询）
+│           └── application.yml             # 应用配置（含CAS配置）
+├── src/test/                # 测试代码
+│   └── java/com/abajin/innovation/
+│       └── service/
+│           └── CasServiceTest.java      # CAS服务单元测试
+├── sql/
+│   └── cas_auth.sql                     # CAS数据库变更脚本
+├── cas_demo/                # CAS Demo示例代码
 ├── Dockerfile               # 后端 Dockerfile
-├── docker-compose.prod.yml  # 生产环境配置
+├── docker-compose.yml       # Docker Compose配置（含CAS环境变量）
 ├── nginx.conf               # Nginx 反向代理配置
 ├── DEPLOY.md               # 本文档
 └── ...
 ```
 
-## 12. 相关命令速查
+## 13. 相关命令速查
 
 ```bash
 # ========== 部署 ==========
@@ -378,7 +505,7 @@ git submodule update --remote           # 更新子模块到最新
 git submodule update --remote --merge   # 更新并合并
 ```
 
-## 13. 更新 CD 配置
+## 14. 更新 CD 配置
 
 如需修改定时触发时间，编辑 `.github/workflows/cd.yml`：
 

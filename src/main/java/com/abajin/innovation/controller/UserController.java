@@ -67,6 +67,45 @@ public class UserController {
     }
 
     /**
+     * 更新当前用户信息
+     * PUT /api/users/me
+     */
+    @PutMapping("/me")
+    public Result<LoginUserDTO> updateCurrentUser(
+            @RequestBody User user,
+            @RequestAttribute("userId") Long userId) {
+        try {
+            User updatedUser = userService.updateCurrentUser(userId, user);
+            return Result.success("资料更新成功", LoginUserDTOConverter.convert(updatedUser));
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
+     * 获取当前用户的认证方式信息
+     * GET /api/users/me/auth-info
+     */
+    @GetMapping("/me/auth-info")
+    public Result<Map<String, Object>> getCurrentUserAuthInfo(@RequestAttribute("userId") Long userId) {
+        try {
+            User user = userService.getUserById(userId);
+            if (user == null) {
+                return Result.error("用户不存在");
+            }
+            
+            Map<String, Object> authInfo = Map.of(
+                "authType", user.getAuthType() != null ? user.getAuthType() : "LOCAL",
+                "casUid", user.getCasUid() != null ? user.getCasUid() : "",
+                "isProfileComplete", user.getIsProfileComplete() != null ? user.getIsProfileComplete() : 1
+            );
+            return Result.success(authInfo);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
      * 获取用户列表（管理员功能）
      * GET /api/users
      */
@@ -102,6 +141,23 @@ public class UserController {
     public Result<User> getUserById(@PathVariable Long id) {
         try {
             User user = userService.getUserById(id);
+            if (user == null) {
+                return Result.error("用户不存在");
+            }
+            return Result.success(user);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
+     * 根据学号/工号获取用户详情（管理员功能）
+     * GET /api/users/cas/{casUid}
+     */
+    @GetMapping("/cas/{casUid}")
+    public Result<User> getUserByCasUid(@PathVariable String casUid) {
+        try {
+            User user = userService.getUserByCasUid(casUid);
             if (user == null) {
                 return Result.error("用户不存在");
             }

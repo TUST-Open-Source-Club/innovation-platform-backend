@@ -28,6 +28,9 @@ public class LoginUserDTOConverter {
         dto.setCollegeId(user.getCollegeId());
         dto.setCollegeName(user.getCollegeName());
         dto.setStatus(user.getStatus());
+        dto.setAuthType(user.getAuthType());
+        dto.setCasUid(user.getCasUid());
+        dto.setIsProfileComplete(user.getIsProfileComplete());
         dto.setCreateTime(user.getCreateTime());
         dto.setUpdateTime(user.getUpdateTime());
         return dto;

@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;NON_KEYWORDS=USER
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  sql:
+    init:
+      schema-locations: classpath:schema-h2.sql
+      data-locations: classpath:data-h2.sql
+      mode: always
+  h2:
+    console:
+      enabled: true
+
+# JWT配置
+jwt:
+  secret: test-secret-key-for-integration-tests-only
+  expiration: 86400000
+
+# CAS统一身份认证配置（Mock模式）
+cas:
+  enabled: true
+  mock-mode: true
+  server-url-prefix: http://mock-cas-server.com/cas
+  server-login-url: http://mock-cas-server.com/cas/login
+  client-host-url: http://localhost:8080/api
+
+# 文件存储配置
+file:
+  storage:
+    path: ./uploads_test
+  access:
+    url: /uploads

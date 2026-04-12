@@ -54,6 +54,13 @@ jwt:
   secret: ${JWT_SECRET:innovation-platform-secret-key-2024}
   expiration: ${JWT_EXPIRATION:86400000}
 
+# CAS统一身份认证配置
+cas:
+  enabled: ${CAS_ENABLED:false}
+  server-url-prefix: ${CAS_SERVER_URL_PREFIX:http://ids.wisedu.com.cn:9086/authserver}
+  server-login-url: ${cas.server-url-prefix}/login
+  client-host-url: ${CAS_CLIENT_HOST_URL:http://localhost:8080/api}
+
 # 日志配置
 logging:
   level:

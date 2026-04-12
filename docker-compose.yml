@@ -55,6 +55,12 @@ services:
       MINIO_SECRETKEY: ${MINIO_SECRET_KEY:-minioadmin}
       JWT_SECRET: ${JWT_SECRET:-innovation-platform-secret-key-2024}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      # CAS统一身份认证配置
+      CAS_ENABLED: ${CAS_ENABLED:-false}
+      CAS_MOCK_MODE: ${CAS_MOCK_MODE:-false}
+      CAS_SERVER_URL_PREFIX: ${CAS_SERVER_URL_PREFIX:-http://ids.wisedu.com.cn:9086/authserver}
+      CAS_SERVER_LOGIN_URL: ${CAS_SERVER_LOGIN_URL:-http://ids.wisedu.com.cn:9086/authserver/login}
+      CAS_CLIENT_HOST_URL: ${CAS_CLIENT_HOST_URL:-http://localhost:8080/api}
     expose:
       - "8080"
     depends_on:

@@ -50,11 +50,19 @@ file:
   access:
     url: /uploads
 
-# JWT??
+# JWT配置
 jwt:
   secret: innovation-platform-secret-key-2024
-  expiration: 86400000 # 24??
+  expiration: 86400000 # 24小时
 
-# ??????
+# CAS统一身份认证配置
+cas:
+  enabled: true  # 是否启用CAS功能，默认关闭
+  mock-mode: true  # Mock模式，只用于本地测试（无需真实CAS服务器）
+  server-url-prefix: http://ids.wisedu.com.cn:9086/authserver #写学校的CAS服务器地址
+  server-login-url: ${cas.server-url-prefix}/login
+  client-host-url: http://localhost:8080/api
+
+# 文件上传路径
 #file:
 #  upload-path: D:/uploads/innovation-platform/

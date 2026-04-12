@@ -27,6 +27,16 @@ public interface UserMapper {
     List<User> selectByRealName(@Param("realName") String realName);
 
     /**
+     * 根据CAS用户ID查询用户
+     */
+    User selectByCasUid(@Param("casUid") String casUid);
+
+    /**
+     * 根据真实姓名和认证方式查询用户列表
+     */
+    List<User> selectByRealNameAndAuthType(@Param("realName") String realName, @Param("authType") String authType);
+
+    /**
      * 插入用户
      */
     int insert(User user);
@@ -57,6 +67,7 @@ public interface UserMapper {
     List<User> selectByCondition(
             @Param("username") String username,
             @Param("realName") String realName,
+            @Param("casUid") String casUid,
             @Param("role") String role,
             @Param("collegeId") Long collegeId,
             @Param("status") Integer status
