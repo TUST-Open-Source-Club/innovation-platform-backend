@@ -162,6 +162,7 @@ jobs:
         JWT_EXPIRATION=86400000
         MYSQL_ROOT_PASSWORD=test123
         MYSQL_DATABASE=innovation_platform_test
+        GITHUB_OWNER=tust-open-source-club
         EOF
         
         # 构建并启动（使用测试配置）
