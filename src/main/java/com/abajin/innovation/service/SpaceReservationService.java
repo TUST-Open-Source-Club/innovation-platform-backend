@@ -276,7 +276,8 @@ public class SpaceReservationService {
                 reservation.setStatus(ReservationStatus.REJECTED.name());
                 reservation.setApprovalStatus(ApprovalStatus.REJECTED.name());
             }
-        } else if (com.abajin.innovation.common.Constants.ROLE_SCHOOL_ADMIN.equals(reviewerRole)) {
+        } else if (com.abajin.innovation.common.Constants.ROLE_SCHOOL_ADMIN.equals(reviewerRole)
+                || com.abajin.innovation.common.Constants.ROLE_STUDENT_ADMIN.equals(reviewerRole)) {
             // School admin can review both college-pending and school-pending reservations
             if (ReservationStatus.PENDING.name().equals(reservation.getStatus())
                     && ApprovalStatus.PENDING.name().equals(reservation.getApprovalStatus())) {
@@ -328,7 +329,8 @@ public class SpaceReservationService {
             return reservationMapper.selectByStatus(ReservationStatus.PENDING.name());
         }
         // School admin: can see both college-pending and school-pending reservations
-        if (com.abajin.innovation.common.Constants.ROLE_SCHOOL_ADMIN.equals(role)) {
+        if (com.abajin.innovation.common.Constants.ROLE_SCHOOL_ADMIN.equals(role)
+                || com.abajin.innovation.common.Constants.ROLE_STUDENT_ADMIN.equals(role)) {
             List<SpaceReservation> allPending = reservationMapper.selectByStatus(ReservationStatus.PENDING.name());
             List<SpaceReservation> schoolPending = reservationMapper.selectByStatus(ReservationStatus.APPROVED.name()).stream()
                     .filter(r -> ApprovalStatus.PENDING.name().equals(r.getApprovalStatus()))
