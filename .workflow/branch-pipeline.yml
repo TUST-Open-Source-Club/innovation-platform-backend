@@ -17,7 +17,7 @@ stages:
         name: build_maven
         displayName: Maven 构建
         jdkVersion: '21'
-        mavenVersion: 4.0.0
+        mavenVersion: 3.6.3
         commands:
           - mvn -B clean package -Dmaven.test.skip=true
         artifacts:
@@ -34,7 +34,7 @@ stages:
         name: unit_test_maven
         displayName: Maven 单元测试
         jdkVersion: '21'
-        mavenVersion: 4.0.0
+        mavenVersion: 3.6.3
         commands:
           - '# Maven单元测试默认命令'
           - mvn -B test -Dmaven.test.failure.ignore=true
